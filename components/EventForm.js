@@ -9,14 +9,17 @@ import {
   FlatList,
   ActivityIndicator,
   Image,
+  ScrollView,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useEventsContext } from '../hooks/useEventsContext';
-import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { launchImageLibrary } from 'react-native-image-picker';
 import AddressAutofill from "./AddressAutofill";
+import DateTimePicker from '@react-native-community/datetimepicker';
+import Icon from "react-native-vector-icons/Feather";
+import { Picker } from '@react-native-picker/picker';
 
-const EventForm = ({ initialData = null, user }) => {
+const EventForm = ({ initialData = null, user, readOnly = false, customButtons = null, isRemake = false }) => {
   const { dispatch } = useEventsContext();
   const navigation = useNavigation();
 
@@ -38,17 +41,21 @@ const EventForm = ({ initialData = null, user }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [imageUri, setImageUri] = useState(null);
   const [imageFile, setImageFile] = useState(null);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
+  const [date, setDate] = useState(new Date());
+  const [time, setTime] = useState(new Date());
 
   const categories = [
-    { name: 'Musique', icon: 'music-note' },
-    { name: 'Gastronomie', icon: 'restaurant' },
-    { name: 'Art', icon: 'palette' },
-    { name: 'Jeux', icon: 'sports-esports' },
-    { name: 'Sport', icon: 'directions-bike' },
-    { name: 'Culture', icon: 'book' },
-    { name: 'Fêtes', icon: 'celebration' },
-    { name: 'Bien-être', icon: 'fitness-center' },
-    { name: 'Autres', icon: 'more-horiz' },
+    { name: "Musique", icon: "music" },
+    { name: "Gastronomie", icon: "coffee" },
+    { name: "Art", icon: "image" },
+    { name: "Jeux", icon: "play" },
+    { name: "Sport", icon: "activity" },
+    { name: "Culture", icon: "book" },
+    { name: "Fêtes", icon: "gift" },
+    { name: "Bien-être", icon: "heart" },
+    { name: "Autres", icon: "more-horizontal" },
   ];
 
   const formatDate = (dateString) => {
@@ -59,13 +66,26 @@ const EventForm = ({ initialData = null, user }) => {
     return `${day}/${month}/${year}`;
   };
 
+  const formatTime = (dateString) => {
+    const date = new Date(dateString);
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${hours}:${minutes}`;
+  };
+
   useEffect(() => {
     if (initialData) {
       const formattedDate = formatDate(initialData.date);
-      const time = `${new Date(initialData.date).getHours()}:${new Date(initialData.date).getMinutes()}`;
-      setFormData({ ...initialData, date: formattedDate, time, maxAttendees: initialData.maxAttendees || '' });
+      const formattedTime = formatTime(initialData.date);
+      setFormData({ 
+        ...initialData, 
+        date: formattedDate,
+        time: formattedTime,
+        maxAttendees: String(initialData.maxAttendees)
+      });
+      setDate(new Date(initialData.date));
+      setTime(new Date(initialData.date));
       setImageUri(initialData.url_cover);
-      
     }
   }, [initialData]);
 
@@ -73,22 +93,18 @@ const EventForm = ({ initialData = null, user }) => {
     setFormData({ ...formData, [key]: value });
   };
 
-  const handleDateChange = (value) => {
-    const formattedValue = value.replace(/[^0-9/]/g, '');
-    if (formattedValue.length === 2 || formattedValue.length === 5) {
-      setFormData({ ...formData, date: formattedValue + '/' });
-    } else {
-      setFormData({ ...formData, date: formattedValue });
-    }
+  const handleDateChange = (event, selectedDate) => {
+    const currentDate = selectedDate || date;
+    setShowDatePicker(false);
+    setDate(currentDate);
+    setFormData({ ...formData, date: formatDate(currentDate) });
   };
 
-  const handleTimeChange = (value) => {
-    const formattedValue = value.replace(/[^0-9:]/g, '');
-    if (formattedValue.length === 2) {
-      setFormData({ ...formData, time: formattedValue + ':' });
-    } else {
-      setFormData({ ...formData, time: formattedValue });
-    }
+  const handleTimeChange = (event, selectedTime) => {
+    const currentTime = selectedTime || time;
+    setShowTimePicker(false);
+    setTime(currentTime);
+    setFormData({ ...formData, time: formatTime(currentTime) });
   };
 
   const handleCategorySelect = (category) => {
@@ -120,6 +136,21 @@ const EventForm = ({ initialData = null, user }) => {
 
   const handleCancel = () => {
     navigation.navigate('MyEvents');
+  };
+
+  const formatDateForSubmission = (dateString, timeString) => {
+    const [day, month, year] = dateString.split('/');
+    const [hours, minutes] = timeString.split(':');
+
+    const formattedDate = new Date(Date.UTC(
+      parseInt(year),
+      parseInt(month) - 1,
+      parseInt(day),
+      parseInt(hours),
+      parseInt(minutes)
+    ));
+
+    return formattedDate.toISOString();
   };
 
   const handleSubmit = async () => {
@@ -156,7 +187,7 @@ const EventForm = ({ initialData = null, user }) => {
 
     setIsLoading(true);
 
-    let uploadedImageUrl = '';
+    let uploadedImageUrl = imageUri || '';
     if (imageFile) {
       const formDataImage = new FormData();
       
@@ -192,13 +223,18 @@ const EventForm = ({ initialData = null, user }) => {
       }
     }
 
-    const event = { ...formData, maxAttendees: attendees, url_cover: uploadedImageUrl };
+    const event = {
+      ...formData,
+      maxAttendees: attendees,
+      url_cover: uploadedImageUrl,
+      date: formatDateForSubmission(formData.date, formData.time),
+    };
 
     try {
-      const method = initialData ? 'PATCH' : 'POST';
-      const url = initialData
-        ? `http://10.0.2.2:4000/api/events/${initialData._id}`
-        : 'http://10.0.2.2:4000/api/events';
+      const method = isRemake ? 'POST' : (initialData ? 'PATCH' : 'POST');
+      const url = isRemake 
+        ? 'http://10.0.2.2:4000/api/events'
+        : (initialData ? `http://10.0.2.2:4000/api/events/${initialData._id}` : 'http://10.0.2.2:4000/api/events');
 
       const response = await fetch(url, {
         method,
@@ -214,8 +250,10 @@ const EventForm = ({ initialData = null, user }) => {
       if (!response.ok) {
         setError(json.error || 'Une erreur est survenue.');
       } else {
-        dispatch({ type: initialData ? 'UPDATE_EVENT' : 'CREATE_EVENT', payload: json });
-        Alert.alert('Succès', initialData ? 'Événement modifié avec succès.' : 'Événement créé avec succès.');
+        const actionType = isRemake ? 'CREATE_EVENT' : (initialData ? 'UPDATE_EVENT' : 'CREATE_EVENT');
+        dispatch({ type: actionType, payload: json });
+        const message = isRemake ? 'Événement recréé avec succès.' : (initialData ? 'Événement modifié avec succès.' : 'Événement créé avec succès.');
+        Alert.alert('Succès', message);
         navigation.navigate('MyEvents');
       }
     } catch (err) {
@@ -226,140 +264,247 @@ const EventForm = ({ initialData = null, user }) => {
     }
   };
 
-  const handleMaxAttendeesChange = (value) => {
-    const numericValue = value.replace(/[^0-9]/g, '');
-    setFormData({ ...formData, maxAttendees: numericValue });
-  };
-
   return (
-    <FlatList
-      data={[{}]}
-      keyExtractor={(item, index) => index.toString()}
-      renderItem={() => (
+    <View style={styles.formContainer}>
+      <ScrollView contentContainerStyle={styles.scrollViewContent}>
         <View style={styles.container}>
-          <Text style={styles.label}>Titre de l'événement</Text>
-          <TextInput
-            style={styles.input}
-            value={formData.title}
-            onChangeText={(text) => handleChange('title', text)}
-          />
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Titre de l'événement</Text>
+            <TextInput
+              style={[styles.input, readOnly && styles.readOnlyInput]}
+              value={formData.title}
+              onChangeText={(text) => handleChange('title', text)}
+              editable={!readOnly}
+            />
+          </View>
 
-          <Text style={styles.label}>Description</Text>
-          <TextInput
-            style={[styles.input, styles.textarea]}
-            value={formData.description}
-            onChangeText={(text) => handleChange('description', text)}
-            multiline
-          />
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Description</Text>
+            <TextInput
+              style={[styles.input, styles.textarea, readOnly && styles.readOnlyInput]}
+              value={formData.description}
+              onChangeText={(text) => handleChange('description', text)}
+              multiline
+              editable={!readOnly}
+            />
+          </View>
 
-          <Text style={styles.label}>Catégorie</Text>
-          <View style={styles.categories}>
-            {categories.map((cat) => (
-              <TouchableOpacity
-                key={cat.name}
-                style={[styles.categoryButton, formData.category === cat.name && styles.categoryButtonSelected]}
-                onPress={() => handleCategorySelect(cat.name)}
-              >
-                <MaterialIcons
-                  name={cat.icon}
-                  size={24}
-                  color={formData.category === cat.name ? '#e53e3e' : '#555'}
-                />
-                <Text style={[styles.categoryText, formData.category === cat.name && styles.categoryTextSelected]}>
-                  {cat.name}
-                </Text>
-              </TouchableOpacity>
-            ))}
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Catégorie</Text>
+            <View style={styles.categoriesContainer}>
+              {categories.map((category) => (
+                <TouchableOpacity
+                  key={category.name}
+                  onPress={() => !readOnly && handleCategorySelect(category.name)}
+                  style={[
+                    styles.categoryButton,
+                    formData.category === category.name && styles.categoryButtonSelected,
+                    readOnly && styles.categoryButtonReadOnly
+                  ]}
+                  disabled={readOnly}
+                >
+                  <Icon 
+                    name={category.icon} 
+                    size={20} 
+                    color={formData.category === category.name ? "#F43F5E" : "#6B7280"} 
+                  />
+                  <Text style={[
+                    styles.categoryText,
+                    formData.category === category.name && styles.categoryTextSelected,
+                    readOnly && styles.categoryTextReadOnly
+                  ]}>
+                    {category.name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
           </View>
 
           <View style={styles.dateTimeContainer}>
             <View style={styles.dateContainer}>
               <Text style={styles.label}>Date (JJ/MM/AAAA)</Text>
-              <TextInput
-                style={styles.input}
-                value={formData.date}
-                onChangeText={handleDateChange}
-                placeholder="JJ/MM/AAAA"
-                keyboardType="numeric"
-                maxLength={10}
-              />
+              {readOnly ? (
+                <Text style={[styles.input, readOnly && styles.readOnlyInput]}>{formData.date}</Text>
+              ) : (
+                <TouchableOpacity onPress={() => setShowDatePicker(true)} style={styles.input}>
+                  <Text>{formData.date || 'Sélectionner une date'}</Text>
+                </TouchableOpacity>
+              )}
             </View>
+
+            {!readOnly && showDatePicker && (
+              <DateTimePicker
+                value={date}
+                mode="date"
+                display="spinner"
+                onChange={handleDateChange}
+              />
+            )}
 
             <View style={styles.timeContainer}>
               <Text style={styles.label}>Heure (HH:MM)</Text>
-              <TextInput
-                style={styles.input}
-                value={formData.time}
-                onChangeText={handleTimeChange}
-                placeholder="HH:MM"
-                keyboardType="numeric"
-                maxLength={5}
-              />
+              {readOnly ? (
+                <Text style={[styles.input, readOnly && styles.readOnlyInput]}>{formData.time}</Text>
+              ) : (
+                <TouchableOpacity onPress={() => setShowTimePicker(true)} style={styles.input}>
+                  <Text>{formData.time || 'Sélectionner une heure'}</Text>
+                </TouchableOpacity>
+              )}
             </View>
+
+            {!readOnly && showTimePicker && (
+              <DateTimePicker
+                value={time}
+                mode="time"
+                display="spinner"
+                onChange={handleTimeChange}
+                is24Hour={true}
+              />
+            )}
           </View>
 
-          <Text style={styles.label}>Lieu</Text>
-          <AddressAutofill
-            onAddressSelect={(selectedAddress) => {
-              setFormData({
-                ...formData,
-                address: selectedAddress.name,
-                postalCode: selectedAddress.postcode,
-                city: selectedAddress.city,
-              });
-            }}
-            initialAddress={formData.address}
-            initialCity={formData.city}
-            initialPostcode={formData.postalCode}
-          />
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Lieu</Text>
+            <AddressAutofill
+              onAddressSelect={(selectedAddress) => {
+                setFormData({
+                  ...formData,
+                  address: selectedAddress.name,
+                  postalCode: selectedAddress.postcode,
+                  city: selectedAddress.city,
+                });
+              }}
+              initialAddress={formData.address}
+              initialCity={formData.city}
+              initialPostcode={formData.postalCode}
+              readOnly={readOnly}
+            />
+          </View>
+          
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Nombre maximum de participants</Text>
+            <TextInput
+              style={[styles.input, readOnly && styles.readOnlyInput]}
+              value={formData.maxAttendees}
+              onChangeText={(text) => handleChange('maxAttendees', text)}
+              keyboardType="numeric"
+              editable={!readOnly}
+            />
+          </View>
 
-          <Text style={styles.label}>Nombre maximum de participants</Text>
-          <TextInput
-            style={styles.input}
-            value={formData.maxAttendees}
-            onChangeText={handleMaxAttendeesChange}
-            keyboardType="numeric"
-          />
-
-          <Text style={styles.label}>Sélectionner une image</Text>
-          <TouchableOpacity onPress={handleImageSelect} style={styles.imagePicker}>
+          <Text style={styles.label}>Image de l'événement</Text>
+          <View style={styles.imageContainer}>
             {imageUri ? (
               <View>
                 <Image source={{ uri: imageUri }} style={styles.image} />
-                <TouchableOpacity onPress={handleImageRemove} style={styles.removeImageButton}>
-                  <Text style={styles.removeImageText}>Supprimer l'image</Text>
-                </TouchableOpacity>
+                {!readOnly && (
+                  <TouchableOpacity onPress={handleImageRemove} style={styles.removeImageButton}>
+                    <Text style={styles.removeImageText}>Supprimer l'image</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             ) : (
-              <Text style={styles.imagePlaceholder}>Appuyez pour sélectionner une image</Text>
+              !readOnly && (
+                <TouchableOpacity onPress={handleImageSelect} style={styles.imagePicker}>
+                  <Text style={[styles.imagePlaceholder, readOnly && styles.readOnlyInput]}>Appuyez pour sélectionner une image</Text>
+                </TouchableOpacity>
+              )
             )}
-          </TouchableOpacity>
+          </View>
 
-          <TouchableOpacity
-            style={[styles.button, isLoading && styles.buttonDisabled]}
-            onPress={handleSubmit}
-            disabled={isLoading}
-          >
-            {isLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Créer</Text>}
-          </TouchableOpacity>
+          {/* Afficher les boutons personnalisés si fournis (cas de suppression) */}
+          {customButtons && (
+            <View style={styles.buttonContainer}>
+              {customButtons.map((button, index) => (
+                <TouchableOpacity
+                  key={index}
+                  style={[
+                    styles.button,
+                    button.style === 'deleteButton' ? styles.submitButton : styles.cancelButton
+                  ]}
+                  onPress={button.onPress}
+                >
+                  <Text style={button.style === 'deleteButton' ? styles.buttonText : styles.cancelButtonText}>
+                    {button.text}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
 
-          <TouchableOpacity onPress={handleCancel} style={styles.cancelButton}>
-            <Text style={styles.cancelButtonText}>Annuler</Text>
-          </TouchableOpacity>
+          {/* Afficher les boutons standard si pas de boutons personnalisés et pas en lecture seule */}
+          {!customButtons && !readOnly && (
+            <View style={styles.buttonContainer}>
+              <TouchableOpacity
+                style={[styles.button, styles.submitButton]}
+                onPress={handleSubmit}
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <ActivityIndicator color="white" />
+                ) : (
+                  <Text style={styles.buttonText}>
+                    {isRemake ? 'Recréer' : (initialData ? 'Modifier' : 'Créer')}
+                  </Text>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.button, styles.cancelButton]}
+                onPress={handleCancel}
+              >
+                <Text style={styles.cancelButtonText}>Annuler</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
-      )}
-    />
+      </ScrollView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    backgroundColor: '#f7f7f7',
     padding: 16,
+    backgroundColor: 'white',
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  title: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  deleteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#e53e3e',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+  },
+  buttonText: {
+    color: 'white',
+    fontSize: 16,
+    marginLeft: 8,
+  },
+  form: {
+    backgroundColor: 'white',
+    borderRadius: 8,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 5,
+    elevation: 5,
+  },
+  inputGroup: {
+    marginBottom: 24,
   },
   label: {
-    fontSize: 16,
+    fontSize: 14,
     color: '#555',
     marginBottom: 8,
   },
@@ -367,62 +512,86 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#ddd',
     borderRadius: 8,
-    padding: 8,
-    backgroundColor: '#fff',
-    color: '#333',
-    marginBottom: 16,
-  },
-  textarea: {
-    height: 80,
-    textAlignVertical: 'top',
-  },
-  categories: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  categoryButton: {
-    alignItems: 'center',
-    marginBottom: 8,
-    padding: 8,
-    borderWidth: 1,
-    borderRadius: 8,
-    borderColor: '#ddd',
-  },
-  categoryButtonSelected: {
-    borderColor: '#e53e3e',
-    backgroundColor: '#ffe5e5',
-  },
-  categoryText: {
-    marginTop: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     fontSize: 14,
+    backgroundColor: '#fff',
     color: '#555',
   },
-  categoryTextSelected: {
-    color: '#e53e3e',
-  },
-  button: {
-    backgroundColor: '#e53e3e',
-    paddingVertical: 12,
+  textarea: {
+    borderWidth: 1,
+    borderColor: '#ddd',
     borderRadius: 8,
-    alignItems: 'center',
-  },
-  buttonDisabled: {
-    backgroundColor: '#f5a5a5',
-  },
-  buttonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    fontSize: 14,
+    backgroundColor: '#f0f0f0',
+    color: '#555',
+    height: 80,
   },
   cancelButton: {
-    marginTop: 16,
+    flex: 1,
+    backgroundColor: '#ddd',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
     alignItems: 'center',
   },
   cancelButtonText: {
-    color: '#e53e3e',
+    color: '#555',
     fontSize: 16,
-    fontWeight: 'bold',
+  },
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorText: {
+    color: 'red',
+    fontSize: 16,
+  },
+  loadingText: {
+    color: '#555',
+    fontSize: 16,
+    marginTop: 8,
+  },
+  categoriesContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    paddingHorizontal: 16,
+  },
+  categoryButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 30,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderColor: "#E5E7EB",
+    borderWidth: 1,
+    gap: 8,
+  },
+  categoryButtonSelected: {
+    borderColor: "#F43F5E",
+    backgroundColor: "#FDE8E8",
+  },
+  categoryButtonReadOnly: {
+    opacity: 0.7,
+    backgroundColor: '#f0f0f0',
+  },
+  categoryText: {
+    fontSize: 12,
+    color: "#6B7280",
+    marginTop: 5,
+    textAlign: "center",
+  },
+  categoryTextSelected: {
+    color: "#F43F5E",
+  },
+  categoryTextReadOnly: {
+    color: '#888',
   },
   imagePicker: {
     borderWidth: 1,
@@ -431,7 +600,12 @@ const styles = StyleSheet.create({
     padding: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#f7f7f7',
+    backgroundColor: '#f0f0f0',
+  },
+  imageContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 10,
   },
   image: {
     width: 100,
@@ -439,7 +613,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   imagePlaceholder: {
-    color: '#888',
+    color: '#555',
   },
   removeImageButton: {
     marginTop: 8,
@@ -460,6 +634,40 @@ const styles = StyleSheet.create({
   },
   timeContainer: {
     flex: 1,
+  },
+  buttonContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 16,
+    gap: 8,
+  },
+  button: {
+    flex: 1,
+    backgroundColor: '#e53e3e',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  buttonDisabled: {
+    backgroundColor: '#f5a5a5',
+  },
+  formContainer: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    padding: 16,
+    backgroundColor: '#fff',
+  },
+  readOnlyInput: {
+    backgroundColor: '#f0f0f0',
+  },
+  submitButton: {
+    backgroundColor: '#e53e3e',
+  },
+  cancelButton: {
+    backgroundColor: '#ddd',
   },
 });
 

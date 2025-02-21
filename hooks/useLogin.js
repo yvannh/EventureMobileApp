@@ -18,24 +18,22 @@ export const useLogin = () => {
         body: JSON.stringify({ email, password }),
       })
 
-      const data = await response.json()
+      const json = await response.json()
 
       if (!response.ok) {
-        throw new Error(data.error || 'Erreur lors de la connexion')
+        setError(json.error)
+        setIsLoading(false)
+        return { error: json.error }
       }
-
-      // Vérifiez que les données contiennent les informations sur les événements
-      console.log("Données de l'utilisateur après connexion :", data); // Log pour vérifier les données
-
-      // Sauvegarde l'utilisateur dans le localStorage
-      await AsyncStorage.setItem('user', JSON.stringify(data))
-
-      // Met à jour l'état d'authentification
-      dispatch({ type: 'LOGIN', payload: data })
+      
+      await AsyncStorage.setItem('user', JSON.stringify(json))
+      dispatch({ type: 'LOGIN', payload: json })
+      setIsLoading(false)
+      return { success: true }
     } catch (err) {
       setError(err.message)
-    } finally {
       setIsLoading(false)
+      return { error: err.message }
     }
   }
 

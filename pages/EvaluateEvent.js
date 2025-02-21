@@ -2,22 +2,30 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { useAuthContext } from '../hooks/useAuthContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const EvaluateEvent = () => {
   const route = useRoute();
   const navigation = useNavigation();
-  const { id } = route.params || {}; // Récupère l'ID de l'événement depuis les paramètres
+  const { eventId } = route.params || {};
   const [note, setNote] = useState(null);
   const [comment, setComment] = useState('');
   const [event, setEvent] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const { user } = useAuthContext();
+  const { user, dispatch } = useAuthContext();
+  const [hasAlreadyCommented, setHasAlreadyCommented] = useState(false);
 
   useEffect(() => {
+    const checkIfAlreadyCommented = () => {
+      if (user?.commented && user.commented.includes(eventId)) {
+        setHasAlreadyCommented(true);
+      }
+    };
+
     const fetchEventDetails = async () => {
       try {
-        const eventResponse = await fetch(`https://votre-api.com/api/events/${id}`, {
+        const eventResponse = await fetch(`http://10.0.2.2:4000/api/events/${eventId}`, {
           method: 'GET',
           headers: {
             ...(user?.token ? { Authorization: `Bearer ${user.token}` } : {}),
@@ -41,9 +49,10 @@ const EvaluateEvent = () => {
     };
 
     if (user) {
+      checkIfAlreadyCommented();
       fetchEventDetails();
     }
-  }, [id, user]);
+  }, [eventId, user]);
 
   const handleAddEvaluation = async () => {
     if (note === null || !comment) {
@@ -52,13 +61,13 @@ const EvaluateEvent = () => {
     }
 
     try {
-      const response = await fetch(`https://votre-api.com/api/events/evaluate`, {
+      const response = await fetch(`http://10.0.2.2:4000/api/events/evaluate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           ...(user?.token ? { Authorization: `Bearer ${user.token}` } : {}),
         },
-        body: JSON.stringify({ eventId: id, note, comment }),
+        body: JSON.stringify({ eventId: eventId, note, comment }),
       });
 
       const data = await response.json();
@@ -67,8 +76,32 @@ const EvaluateEvent = () => {
         throw new Error(data.error || "Erreur lors de l'ajout de l'évaluation.");
       }
 
+      // Mettre à jour user.commented dans la base de données
+      const userResponse = await fetch('http://10.0.2.2:4000/api/user/add-comment', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${user.token}`,
+        },
+        body: JSON.stringify({ eventId }),
+      });
+
+      if (!userResponse.ok) {
+        throw new Error("Erreur lors de la mise à jour des commentaires de l'utilisateur.");
+      }
+
+      const userJson = await userResponse.json();
+      
+      // Mettre à jour le contexte et AsyncStorage avec le nouvel état de l'utilisateur
+      const updatedUser = {
+        ...user,
+        commented: userJson.commented
+      };
+      await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
+      dispatch({ type: 'LOGIN', payload: updatedUser });
+
       Alert.alert('Succès', 'Évaluation ajoutée avec succès.');
-      navigation.navigate('Participations'); // Navigue vers la liste des participations
+      navigation.navigate('ParticipatingEvents');
     } catch (err) {
       setError(err.message);
     }
@@ -87,6 +120,14 @@ const EvaluateEvent = () => {
     return (
       <View style={styles.centered}>
         <Text style={styles.errorText}>Aucun événement trouvé.</Text>
+      </View>
+    );
+  }
+
+  if (hasAlreadyCommented) {
+    return (
+      <View style={styles.centered}>
+        <Text style={styles.errorText}>Vous avez déjà évalué cet événement.</Text>
       </View>
     );
   }

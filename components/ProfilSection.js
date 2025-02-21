@@ -10,11 +10,62 @@ import { useNavigation } from '@react-navigation/native';
 import { useAuthContext } from '../hooks/useAuthContext';
 import { useLogout } from '../hooks/useLogout';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const ProfileSection = () => {
-  const { user } = useAuthContext();
+  const { user, dispatch } = useAuthContext();
   const { logout } = useLogout();
   const navigation = useNavigation();
+
+  const handleDeleteComment = async (eventId) => {
+    try {
+      const storedUser = await AsyncStorage.getItem('user');
+      if (!storedUser) {
+        throw new Error('Données utilisateur non trouvées');
+      }
+
+      const currentUser = JSON.parse(storedUser);
+
+      const response = await fetch(`http://10.0.2.2:4000/api/events/remove-evaluate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${currentUser.token}`,
+        },
+        body: JSON.stringify({ eventId }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Erreur lors de la suppression du commentaire');
+      }
+
+      const userResponse = await fetch('http://10.0.2.2:4000/api/user/remove-comment', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${currentUser.token}`,
+        },
+        body: JSON.stringify({ eventId }),
+      });
+
+      if (!userResponse.ok) {
+        throw new Error('Erreur lors de la mise à jour des commentaires');
+      }
+
+      const updatedCommented = currentUser.commented.filter(id => id !== eventId);
+      const updatedUser = {
+        ...currentUser,
+        commented: updatedCommented
+      };
+
+      await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
+      dispatch({ type: 'LOGIN', payload: updatedUser });
+
+      Alert.alert('Succès', 'Commentaire supprimé avec succès');
+    } catch (error) {
+      Alert.alert('Erreur', error.message);
+    }
+  };
 
   const handleLogout = () => {
     logout();
@@ -90,8 +141,7 @@ const ProfileSection = () => {
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    backgroundColor: '#f7f7f7',
+    backgroundColor: 'white',
     padding: 16,
   },
   header: {
@@ -120,7 +170,7 @@ const styles = StyleSheet.create({
   buttonRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    marginBottom: 8,
   },
   outlineButton: {
     flex: 1,

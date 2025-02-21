@@ -8,7 +8,10 @@ const EventCardUser = ({ event }) => {
   const navigation = useNavigation();
 
   const handleNavigate = () => {
-    navigation.navigate('EventDetails', { eventId: event._id });
+    navigation.navigate('EventDetails', { 
+      eventId: event._id,
+      refresh: Date.now()
+    });
   };
 
   const handleEditNavigate = (e) => {
@@ -110,12 +113,10 @@ const styles = StyleSheet.create({
   container: {
     backgroundColor: 'white',
     borderRadius: 8,
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 5,
-    elevation: 3,
     marginBottom: 16,
     padding: 16,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
   },
   pastTag: {
     position: 'absolute',

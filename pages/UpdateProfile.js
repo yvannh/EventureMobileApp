@@ -16,7 +16,7 @@ const UpdateProfile = () => {
     setError('');
 
     try {
-      const response = await fetch('https://votre-api.com/api/user/update-user', {
+      const response = await fetch('http://10.0.2.2:4000/api/user/update-user', {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',

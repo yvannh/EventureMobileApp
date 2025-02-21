@@ -6,14 +6,17 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
+  Animated,
 } from 'react-native';
+import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 
-const AddressAutofill = ({ onAddressSelect, initialAddress, initialCity, initialPostcode }) => {
+const AddressAutofill = ({ onAddressSelect, initialAddress, initialCity, initialPostcode, readOnly = false }) => {
   const [query, setQuery] = useState(initialAddress || '');
   const [city, setCity] = useState(initialCity || '');
   const [postcode, setPostcode] = useState(initialPostcode || '');
   const [suggestions, setSuggestions] = useState([]);
   const [debounceTimeout, setDebounceTimeout] = useState(null);
+  const [showSuggestions, setShowSuggestions] = useState(true);
 
   useEffect(() => {
     // Mettre à jour les champs si les props initiales changent
@@ -27,8 +30,7 @@ const AddressAutofill = ({ onAddressSelect, initialAddress, initialCity, initial
       clearTimeout(debounceTimeout);
     }
 
-    // Afficher les suggestions uniquement si l'utilisateur a saisi quelque chose
-    if (query.length > 2 && !initialAddress) {
+    if (query.length > 2 && query.toLowerCase() !== initialAddress.toLowerCase()) {
       const timeout = setTimeout(() => {
         fetchSuggestions(query);
       }, 1000);
@@ -65,6 +67,7 @@ const AddressAutofill = ({ onAddressSelect, initialAddress, initialCity, initial
     setCity(suggestion.city);
     setPostcode(suggestion.postcode);
     setSuggestions([]);
+    setShowSuggestions(false);
     onAddressSelect({
       name: suggestion.name,
       postcode: suggestion.postcode,
@@ -72,58 +75,128 @@ const AddressAutofill = ({ onAddressSelect, initialAddress, initialCity, initial
     });
   };
 
-  // Filtrer les suggestions pour éviter les doublons, mais garder la suggestion sélectionnée
-  const filteredSuggestions = suggestions.filter(suggestion => 
-    suggestion.name.toLowerCase() !== query.toLowerCase() || suggestion.name.toLowerCase() === query.toLowerCase()
-  );
+  const handleBlur = () => {
+    setTimeout(() => {
+      onAddressSelect({
+        name: query,
+        postcode: postcode,
+        city: city,
+      });
+    }, 200);
+  };
+
+  const handleCloseSuggestions = () => {
+    setShowSuggestions(false);
+    setSuggestions([]);
+  };
+
+  const handleFocus = () => {
+    setShowSuggestions(true);
+  };
+
+  const handleCityChange = (value) => {
+    setCity(value);
+    onAddressSelect({
+      name: query,
+      postcode: postcode,
+      city: value,
+    });
+  };
+
+  const handlePostcodeChange = (value) => {
+    // Permet uniquement les chiffres
+    const numericValue = value.replace(/[^0-9]/g, '');
+    setPostcode(numericValue);
+    onAddressSelect({
+      name: query,
+      postcode: numericValue,
+      city: city,
+    });
+  };
 
   return (
     <View>
-      <TextInput
-        style={styles.input}
-        placeholder="Saisissez votre adresse"
-        value={query}
-        onChangeText={setQuery}
-      />
+      <View style={styles.inputContainer}>
+        <TextInput
+          style={[styles.input, readOnly && styles.readOnlyInput]}
+          placeholder="Saisissez votre adresse"
+          value={query}
+          onChangeText={setQuery}
+          onBlur={handleBlur}
+          onFocus={handleFocus}
+          editable={!readOnly}
+        />
+        {suggestions.length > 0 && showSuggestions && (
+          <TouchableOpacity
+            style={styles.closeButton}
+            onPress={handleCloseSuggestions}
+          >
+            <MaterialIcons name="close" size={20} color="#666" />
+          </TouchableOpacity>
+        )}
+      </View>
+
       <View style={styles.row}>
         <View style={styles.halfWidth}>
           <TextInput
-            style={styles.input}
+            style={[styles.input, readOnly && styles.readOnlyInput]}
             placeholder="Code postal"
             value={postcode}
-            editable={false}
+            onChangeText={handlePostcodeChange}
+            keyboardType="numeric"
+            maxLength={5} // Limite à 5 chiffres pour les codes postaux français
+            editable={!readOnly}
           />
         </View>
         <View style={styles.halfWidth}>
           <TextInput
-            style={styles.input}
+            style={[styles.input, readOnly && styles.readOnlyInput]}
             placeholder="Ville"
             value={city}
-            editable={false}
+            onChangeText={handleCityChange}
+            editable={!readOnly}
           />
         </View>
       </View>
-      {filteredSuggestions.length > 0 && (
-        <FlatList
-          data={filteredSuggestions}
-          keyExtractor={(item) => item.label}
-          renderItem={({ item }) => (
+
+      {!readOnly && suggestions.length > 0 && showSuggestions && (
+        <View style={styles.suggestionsContainer}>
+          <View style={styles.suggestionsHeader}>
+            <Text style={styles.suggestionsTitle}>Suggestions</Text>
             <TouchableOpacity 
-              style={styles.suggestionItem} 
-              onPress={() => handleSelect(item)}
+              style={styles.hideButton}
+              onPress={handleCloseSuggestions}
             >
-              <Text style={styles.suggestion}>{item.label}</Text>
+              <Text style={styles.hideButtonText}>Masquer les suggestions</Text>
             </TouchableOpacity>
-          )}
-          style={styles.suggestionsList}
-        />
+          </View>
+          <FlatList
+            data={suggestions}
+            keyExtractor={(item) => item.label}
+            renderItem={({ item }) => (
+              <TouchableOpacity 
+                style={styles.suggestionItem} 
+                onPress={() => handleSelect(item)}
+              >
+                <Text style={styles.suggestion}>{item.label}</Text>
+              </TouchableOpacity>
+            )}
+            style={styles.suggestionsList}
+          />
+        </View>
       )}
     </View>
   );
 };
 
 const styles = StyleSheet.create({
+  inputContainer: {
+    position: 'relative',
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   input: {
+    flex: 1,
     borderWidth: 1,
     borderColor: '#ddd',
     borderRadius: 8,
@@ -131,6 +204,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     color: '#333',
     marginBottom: 8,
+  },
+  closeButton: {
+    position: 'absolute',
+    right: 10,
+    padding: 5,
   },
   row: {
     flexDirection: 'row',
@@ -140,12 +218,35 @@ const styles = StyleSheet.create({
   halfWidth: {
     flex: 1,
   },
-  suggestionsList: {
-    maxHeight: 200,
-    backgroundColor: '#fff',
-    borderRadius: 8,
+  suggestionsContainer: {
     borderWidth: 1,
     borderColor: '#ddd',
+    borderRadius: 8,
+    backgroundColor: '#fff',
+    marginTop: 4,
+  },
+  suggestionsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#ddd',
+  },
+  suggestionsTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  hideButton: {
+    padding: 4,
+  },
+  hideButtonText: {
+    color: '#e53e3e',
+    fontSize: 12,
+  },
+  suggestionsList: {
+    maxHeight: 200,
   },
   suggestionItem: {
     padding: 10,
@@ -154,6 +255,9 @@ const styles = StyleSheet.create({
   },
   suggestion: {
     color: '#333',
+  },
+  readOnlyInput: {
+    backgroundColor: '#f0f0f0',
   },
 });
 

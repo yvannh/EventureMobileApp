@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, Alert } from 'react-native';
-import { useRoute } from '@react-navigation/native';
+import { View, Text, StyleSheet, ActivityIndicator, Alert, TouchableOpacity } from 'react-native';
+import { useRoute, useNavigation } from '@react-navigation/native';
 import { useAuthContext } from '../hooks/useAuthContext';
 import EventForm from '../components/EventForm';
+import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 
 const UpdateEventPage = () => {
   const route = useRoute();
@@ -10,16 +11,23 @@ const UpdateEventPage = () => {
   const [eventData, setEventData] = useState(null);
   const [error, setError] = useState(null);
   const { user } = useAuthContext();
+  const navigation = useNavigation();
+
+  if (!user) {
+    navigation.replace('Login');
+    return null;
+  }
 
   useEffect(() => {
+    if (!eventId) {
+      navigation.replace('MyEvents');
+      return;
+    }
+
     const fetchEvent = async () => {
       try {
-        if (!user || !user.token) {
+        if (!user.token) {
           throw new Error('Token manquant. Veuillez vous reconnecter.');
-        }
-
-        if (!eventId) {
-          throw new Error("L'ID de l'événement est requis.");
         }
 
         const response = await fetch(`http://10.0.2.2:4000/api/events/${eventId}`, {
@@ -46,6 +54,10 @@ const UpdateEventPage = () => {
     fetchEvent();
   }, [eventId, user]);
 
+  const handleGoBack = () => {
+    navigation.goBack();
+  };
+
   if (error) {
     return (
       <View style={styles.centered}>
@@ -65,8 +77,16 @@ const UpdateEventPage = () => {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Modifier l'événement</Text>
-      <EventForm initialData={eventData} user={user} />
+      <View style={styles.header}>
+        <TouchableOpacity onPress={handleGoBack} style={styles.backButton}>
+          <MaterialIcons name="arrow-back" size={20} color="gray" />
+          <Text style={styles.backButtonText}>Retour</Text>
+        </TouchableOpacity>
+        <Text style={styles.title}>Modifier l'événement</Text>
+      </View>
+      <View style={styles.eventFormContainer}>
+        <EventForm initialData={eventData} user={user} />
+      </View>
     </View>
   );
 };
@@ -76,6 +96,21 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f7f7f7',
     padding: 16,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  backButtonText: {
+    fontSize: 16,
+    color: 'gray',
+    marginLeft: 4,
   },
   title: {
     fontSize: 24,
@@ -98,6 +133,13 @@ const styles = StyleSheet.create({
     color: '#555',
     fontSize: 16,
     marginTop: 8,
+  },
+  eventFormContainer: {
+    maxWidth: 600,
+    alignSelf: 'center',
+    width: '100%',
+    flex: 1,
+    paddingBottom: 20,
   },
 });
 

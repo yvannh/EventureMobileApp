@@ -142,21 +142,23 @@ const UserComments = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f7f7f7',
+    backgroundColor: 'white',
     padding: 16,
+    paddingTop: 16,
   },
   title: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: 'bold',
+    marginBottom: 8,
     color: '#333',
-    marginBottom: 16,
   },
   eventContainer: {
     backgroundColor: '#fff',
     borderRadius: 8,
     padding: 16,
     marginBottom: 16,
-    elevation: 2,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
   },
   eventTitle: {
     fontSize: 18,

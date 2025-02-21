@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useAuthContext } from '../hooks/useAuthContext';
 import { View, Text, ActivityIndicator, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
 import EventCardUser from './EventCardUser';
+import { useFocusEffect } from '@react-navigation/native';
 
 const EventListUser = () => {
   const { user } = useAuthContext();
@@ -11,12 +12,21 @@ const EventListUser = () => {
   const [activeFilter, setActiveFilter] = useState("all"); // Filtre actif
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  // Ajouter useFocusEffect pour recharger la liste quand nécessaire
+  useFocusEffect(
+    useCallback(() => {
+      setRefreshKey(prev => prev + 1);
+    }, [])
+  );
 
   useEffect(() => {
     if (!user) return;
 
     const fetchEvents = async () => {
       try {
+        setIsLoading(true);
         const response = await fetch('http://10.0.2.2:4000/api/events', {
           headers: {
             Authorization: `Bearer ${user.token}`,
@@ -44,7 +54,7 @@ const EventListUser = () => {
     };
 
     fetchEvents();
-  }, [user]);
+  }, [user, refreshKey]); // Ajouter refreshKey comme dépendance
 
   // Gère le filtrage des événements
   useEffect(() => {

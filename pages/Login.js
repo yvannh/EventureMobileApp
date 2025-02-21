@@ -10,8 +10,15 @@ const Login = () => {
   const navigation = useNavigation();
 
   const handleSubmit = async () => {
-    await login(email, password);
-    navigation.navigate('Home');
+    if (!email || !password) {
+      console.error('Tous les champs doivent être remplis');
+      return;
+    }
+
+    const result = await login(email, password);
+    if (!result.error) {
+      navigation.navigate('Home');
+    }
   };
 
   return (

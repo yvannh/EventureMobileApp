@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useAuthContext } from './useAuthContext'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 
 export const useSignup = () => {
   const [error, setError] = useState(null)
@@ -10,26 +11,28 @@ export const useSignup = () => {
     setIsLoading(true)
     setError(null)
 
-    const response = await fetch('/api/user/signup', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ nom, email, password, participate, commented})
-    })
-    const json = await response.json()
+    try {
+      const response = await fetch('http://10.0.2.2:4000/api/user/signup', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ nom, email, password, participate, commented})
+      })
+      const json = await response.json()
 
-    if (!response.ok) {
-      setIsLoading(false)
-      setError(json.error)
-    }
-    if (response.ok) {
-      // Sauvegarder l'utilisateur dans le localStorage
-      localStorage.setItem('user', JSON.stringify(json))
+      if (!response.ok) {
+        setIsLoading(false)
+        setError(json.error)
+        return { error: json.error }
+      }
 
-      // Mettre à jour le contexte d'authentification
+      await AsyncStorage.setItem('user', JSON.stringify(json))
       dispatch({type: 'LOGIN', payload: json})
-
-      // Mise à jour de l'état de chargement
       setIsLoading(false)
+      return { success: true }
+    } catch (err) {
+      setError(err.message)
+      setIsLoading(false)
+      return { error: err.message }
     }
   }
 

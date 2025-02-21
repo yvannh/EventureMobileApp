@@ -18,7 +18,11 @@ const Signup = () => {
 
     const participate = [];
     const commented = [];
-    await signup(nom, email, password, participate, commented);
+    const result = await signup(nom, email, password, participate, commented);
+    
+    if (!result.error) {
+      navigation.navigate('Home');
+    }
   };
 
   return (

@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { useAuthContext } from '../hooks/useAuthContext';
 import { useNavigation } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const StarRating = ({ note }) => {
   const stars = Array(5)
@@ -21,7 +22,7 @@ const StarRating = ({ note }) => {
 };
 
 const CommentCard = ({ name, note, comment, eventId, parent }) => {
-  const { user } = useAuthContext();
+  const { user, dispatch } = useAuthContext();
   const navigation = useNavigation();
 
   const showTrashIcon = parent === 'UserComments';
@@ -39,11 +40,18 @@ const CommentCard = ({ name, note, comment, eventId, parent }) => {
           text: "Supprimer",
           onPress: async () => {
             try {
+              const storedUser = await AsyncStorage.getItem('user');
+              if (!storedUser) {
+                throw new Error('Données utilisateur non trouvées');
+              }
+
+              const currentUser = JSON.parse(storedUser);
+
               const eventResponse = await fetch(`http://10.0.2.2:4000/api/events/${eventId}`, {
                 method: "GET",
                 headers: {
                   "Content-Type": "application/json",
-                  Authorization: `Bearer ${user.token}`,
+                  Authorization: `Bearer ${currentUser.token}`,
                 },
               });
 
@@ -52,7 +60,7 @@ const CommentCard = ({ name, note, comment, eventId, parent }) => {
                   method: "PATCH",
                   headers: {
                     "Content-Type": "application/json",
-                    Authorization: `Bearer ${user.token}`,
+                    Authorization: `Bearer ${currentUser.token}`,
                   },
                   body: JSON.stringify({ eventId }),
                 });
@@ -62,7 +70,7 @@ const CommentCard = ({ name, note, comment, eventId, parent }) => {
                   method: "POST",
                   headers: {
                     "Content-Type": "application/json",
-                    Authorization: `Bearer ${user.token}`,
+                    Authorization: `Bearer ${currentUser.token}`,
                   },
                   body: JSON.stringify({ eventId }),
                 });
@@ -72,16 +80,32 @@ const CommentCard = ({ name, note, comment, eventId, parent }) => {
                   throw new Error(errorData.error || "Erreur lors de la suppression.");
                 }
 
-                await fetch("http://10.0.2.2:4000/api/user/remove-comment", {
+                // Mettre à jour user.commented dans le backend
+                const userResponse = await fetch("http://10.0.2.2:4000/api/user/remove-comment", {
                   method: "PATCH",
                   headers: {
                     "Content-Type": "application/json",
-                    Authorization: `Bearer ${user.token}`,
+                    Authorization: `Bearer ${currentUser.token}`,
                   },
                   body: JSON.stringify({ eventId }),
                 });
+
+                if (!userResponse.ok) {
+                  throw new Error("Erreur lors de la mise à jour des commentaires");
+                }
+
+                // Mettre à jour l'AsyncStorage
+                const updatedCommented = currentUser.commented.filter(id => id !== eventId);
+                const updatedUser = {
+                  ...currentUser,
+                  commented: updatedCommented
+                };
+
+                await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
+                dispatch({ type: 'LOGIN', payload: updatedUser });
+
                 Alert.alert("Succès", "Commentaire supprimé avec succès.");
-                navigation.navigate("Participations");
+                navigation.navigate("ParticipatingEvents");
               } else {
                 throw new Error("Erreur lors de la vérification de l'événement.");
               }
@@ -123,11 +147,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderRadius: 10,
     padding: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
     marginBottom: 16,
     position: "relative",
   },

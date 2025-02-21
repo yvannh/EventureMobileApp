@@ -20,7 +20,7 @@ const categories = [
   { name: "Autres", icon: "more-horizontal" },
 ];
 
-export default function CategoryFilter({ selectedCategory, onSelectCategory }) {
+export default function CategoryFilter({ selectedCategory, onSelectCategory, readOnly = false }) {
   const scrollRef = useRef(null);
 
   const handleSelectAll = () => {
@@ -38,58 +38,54 @@ export default function CategoryFilter({ selectedCategory, onSelectCategory }) {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Catégories</Text>
 
       {/* Boutons de défilement */}
-      <View style={styles.scrollButtons}>
-        <TouchableOpacity
-          onPress={() => scroll("left")}
-          style={[styles.scrollButton, styles.leftButton]}
-        >
-          <Icon name="chevron-left" size={24} color="#6B7280" />
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={() => scroll("right")}
-          style={[styles.scrollButton, styles.rightButton]}
-        >
-          <Icon name="chevron-right" size={24} color="#6B7280" />
-        </TouchableOpacity>
-      </View>
+      {!readOnly && (
+        <View style={styles.scrollButtons}>
+          <TouchableOpacity
+            onPress={() => scroll("left")}
+            style={[styles.scrollButton, styles.leftButton]}
+          >
+            <Icon name="chevron-left" size={24} color="#6B7280" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => scroll("right")}
+            style={[styles.scrollButton, styles.rightButton]}
+          >
+            <Icon name="chevron-right" size={24} color="#6B7280" />
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Conteneur des catégories */}
-      <ScrollView
-        horizontal
-        ref={scrollRef}
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContainer}
-      >
-        {/* Bouton "Toutes les catégories" */}
-        <TouchableOpacity
-          onPress={handleSelectAll}
-          style={[
-            styles.categoryButton,
-            selectedCategory === "" && styles.selectedButton,
-          ]}
-        >
-          <Text
+      <View style={styles.categoriesContainer}>
+        {!readOnly && (
+          <TouchableOpacity
+            onPress={handleSelectAll}
             style={[
-              styles.categoryText,
-              selectedCategory === "" && styles.selectedText,
+              styles.categoryButton,
+              selectedCategory === "" && styles.selectedButton,
             ]}
           >
-            Toutes les catégories
-          </Text>
-        </TouchableOpacity>
+            <Text
+              style={[
+                styles.categoryText,
+                selectedCategory === "" && styles.selectedText,
+              ]}
+            >
+              Toutes les catégories
+            </Text>
+          </TouchableOpacity>
+        )}
 
         {categories.map((category) => (
           <TouchableOpacity
             key={category.name}
-            onPress={() =>
-              onSelectCategory(selectedCategory === category.name ? "" : category.name)
-            }
+            onPress={() => !readOnly && onSelectCategory(selectedCategory === category.name ? "" : category.name)}
             style={[
               styles.categoryButton,
               selectedCategory === category.name && styles.selectedButton,
+              readOnly && styles.readOnlyButton,
             ]}
           >
             <Icon
@@ -107,7 +103,7 @@ export default function CategoryFilter({ selectedCategory, onSelectCategory }) {
             </Text>
           </TouchableOpacity>
         ))}
-      </ScrollView>
+      </View>
     </View>
   );
 }
@@ -115,17 +111,13 @@ export default function CategoryFilter({ selectedCategory, onSelectCategory }) {
 const styles = StyleSheet.create({
   container: {
     paddingVertical: 10,
-    backgroundColor: "#F9FAFB",
+    backgroundColor: "white",
   },
   title: {
     fontSize: 18,
     fontWeight: "bold",
     color: "#111827",
     marginBottom: 10,
-    paddingHorizontal: 16,
-  },
-  scrollContainer: {
-    alignItems: "center",
     paddingHorizontal: 16,
   },
   scrollButtons: {
@@ -151,17 +143,23 @@ const styles = StyleSheet.create({
     position: "absolute",
     right: 10,
   },
+  categoriesContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    paddingHorizontal: 16,
+  },
   categoryButton: {
-    flexDirection: "column",
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#FFFFFF",
     borderRadius: 30,
     paddingHorizontal: 16,
     paddingVertical: 8,
-    marginHorizontal: 8,
     borderColor: "#E5E7EB",
     borderWidth: 1,
+    gap: 8,
   },
   categoryText: {
     fontSize: 12,
@@ -175,5 +173,9 @@ const styles = StyleSheet.create({
   },
   selectedText: {
     color: "#F43F5E",
+  },
+  readOnlyButton: {
+    backgroundColor: "#E5E7EB",
+    borderColor: "#E5E7EB",
   },
 });

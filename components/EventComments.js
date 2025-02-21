@@ -1,44 +1,47 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, ActivityIndicator, Alert } from 'react-native';
+import React, { useEffect, useState, useCallback } from 'react';
+import { View, Text, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import { useRoute } from '@react-navigation/native';
 import { useAuthContext } from '../hooks/useAuthContext';
 import CommentCard from './CommentCard';
 
-const EventComments = () => {
-  const route = useRoute(); // Récupérer les paramètres de la route
-  const { id } = route.params || {}; // Récupère l'ID de l'événement
+const EventComments = ({ eventId }) => {
+  const route = useRoute();
+  const { id } = route.params || {};
   const [evaluations, setEvaluations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const { user } = useAuthContext();
 
-  useEffect(() => {
-    const fetchEvaluations = async () => {
-      try {
-        const response = await fetch(`https://votre-api.com/api/events/${id}`, {
-          method: 'GET',
-          headers: {
-            ...(user?.token ? { Authorization: `Bearer ${user.token}` } : {}),
-          },
-        });
+  const fetchEvaluations = useCallback(async () => {
+    if (!eventId || !user?.token) {
+      setLoading(false);
+      return;
+    }
 
-        const data = await response.json();
+    try {
+      const response = await fetch(`http://10.0.2.2:4000/api/events/${eventId}`, {
+        headers: {
+          Authorization: `Bearer ${user.token}`,
+        },
+      });
 
-        if (response.ok) {
-          // Récupérer les évaluations depuis le champ evaluate
-          setEvaluations(data.evaluations || []);
-        } else {
-          throw new Error(data.error || "Erreur lors de la récupération des évaluations.");
-        }
-      } catch (err) {
-        setError(err.message || "Une erreur s'est produite.");
-      } finally {
-        setLoading(false);
+      const data = await response.json();
+
+      if (response.ok) {
+        setEvaluations(data.evaluations || []);
+      } else {
+        throw new Error(data.error || "Erreur lors de la récupération des évaluations.");
       }
-    };
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [eventId, user?.token]);
 
+  useEffect(() => {
     fetchEvaluations();
-  }, [id, user]);
+  }, [fetchEvaluations]);
 
   if (loading) {
     return (
@@ -71,20 +74,15 @@ const EventComments = () => {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Avis sur cet événement</Text>
-      <FlatList
-        data={evaluations}
-        keyExtractor={(item, index) => index.toString()}
-        renderItem={({ item }) => (
-          <View style={styles.commentContainer}>
-            <CommentCard
-              name={item.name}
-              note={item.note}
-              comment={item.comment}
-            />
-          </View>
-        )}
-        contentContainerStyle={styles.list}
-      />
+      {evaluations.map((item, index) => (
+        <View key={index} style={styles.commentContainer}>
+          <CommentCard
+            name={item.name}
+            note={item.note}
+            comment={item.comment}
+          />
+        </View>
+      ))}
     </View>
   );
 };
@@ -92,8 +90,7 @@ const EventComments = () => {
 const styles = StyleSheet.create({
   container: {
     padding: 16,
-    backgroundColor: '#f7f7f7',
-    flex: 1,
+    backgroundColor: 'white',
   },
   title: {
     fontSize: 20,
@@ -112,18 +109,14 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: '#fff',
     padding: 8,
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  list: {
-    paddingBottom: 16,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
   },
   centered: {
-    flex: 1,
+    padding: 16,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: 'white',
   },
   loadingText: {
     color: '#555',

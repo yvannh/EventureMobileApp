@@ -19,7 +19,6 @@ import UpdateProfile from './pages/UpdateProfile';
 import RemakeEventPage from './pages/RemakeEvent';
 import DeleteEventPage from './pages/DeleteEvent';
 import EvaluateEvent from './pages/EvaluateEvent';
-import EventDetails from './components/EventDetails';
 import { EventsContextProvider } from './context/EventsContext';
 import { useAuthContext } from './hooks/useAuthContext';
 
@@ -48,7 +47,7 @@ function AppNavigator() {
           <Stack.Screen name="RemakeEventPage" component={RemakeEventPage} />
           <Stack.Screen name="DeleteEventPage" component={DeleteEventPage} />
           <Stack.Screen name="EvaluateEvent" component={EvaluateEvent} />
-          <Stack.Screen name="EventDetails" component={EventDetails} />
+          <Stack.Screen name="EventDetails" component={PageEvent} />
           <Stack.Screen name="UpdateProfile" component={UpdateProfile} />
         </Stack.Navigator>
       </View>

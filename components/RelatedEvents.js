@@ -1,53 +1,56 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import EventCard from "./EventCard";
 import { useAuthContext } from "../hooks/useAuthContext";
 import Icon from "react-native-vector-icons/Feather";
 import { ScrollView, View, Text, TouchableOpacity } from "react-native";
 
-const RelatedEvents = ({ category, eventId }) => {
+const RelatedEvents = ({ category, currentEventId }) => {
   const [events, setEvents] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const { user } = useAuthContext();
-
   const eventsContainerRef = useRef(null);
 
-  useEffect(() => {
-    const fetchEvents = async () => {
-      if (!category) return;
+  const fetchRelatedEvents = useCallback(async () => {
+    if (!category || !user?.token) {
+      setIsLoading(false);
+      return;
+    }
 
-      try {
-        const response = await fetch(`/api/events/all`, {
-          method: "GET",
-          headers: {
-            ...(user?.token ? { Authorization: `Bearer ${user.token}` } : {}),
-          },
-        });
+    try {
+      const response = await fetch(`http://10.0.2.2:4000/api/events/all`, {
+        headers: {
+          Authorization: `Bearer ${user.token}`,
+        },
+      });
 
-        const data = await response.json();
-
-        if (response.ok) {
-          const filteredEvents = data.filter(
-            (event) =>
-              event.category === category &&
-              event._id !== eventId &&
-              new Date(event.date) > new Date()
-          );
-
-          const shuffledEvents = filteredEvents.sort(() => 0.5 - Math.random());
-          setEvents(shuffledEvents.slice(0, 10));
-        } else {
-          setError("Erreur lors de la récupération des événements.");
-        }
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        setIsLoading(false);
+      if (!response.ok) {
+        throw new Error("Erreur lors de la récupération des événements.");
       }
-    };
 
-    fetchEvents();
-  }, [category, eventId, user?.token]);
+      const data = await response.json();
+      
+      // Filtrer et mélanger les événements une seule fois
+      const filteredEvents = data
+        .filter(event => 
+          event.category === category && 
+          event._id !== currentEventId && 
+          new Date(event.date) > new Date()
+        )
+        .sort(() => 0.5 - Math.random())
+        .slice(0, 10);
+
+      setEvents(filteredEvents);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [category, currentEventId, user?.token]);
+
+  useEffect(() => {
+    fetchRelatedEvents();
+  }, [fetchRelatedEvents]);
 
   const handleScroll = (direction) => {
     if (eventsContainerRef.current) {

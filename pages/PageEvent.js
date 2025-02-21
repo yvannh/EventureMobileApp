@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { useAuthContext } from '../hooks/useAuthContext';
@@ -8,41 +8,64 @@ import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import RelatedEvents from '../components/RelatedEvents';
 
 const PageEvent = () => {
-  const route = useRoute(); // Pour accéder aux paramètres de la route
+  const route = useRoute();
   const navigation = useNavigation();
-  const { id } = route.params || {}; // Récupère l'ID de l'événement depuis les paramètres
+  const { eventId } = route.params || {};
   const { user } = useAuthContext();
   const [event, setEvent] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const fetchEvent = useCallback(async () => {
+    if (!eventId || !user?.token) {
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const response = await fetch(`http://10.0.2.2:4000/api/events/${eventId}?ts=${Date.now()}`, {
+        headers: {
+          Authorization: `Bearer ${user.token}`,
+        },
+      });
+      const data = await response.json();
+
+      if (response.ok) {
+        setEvent(data);
+      } else {
+        setError(data.error || "Erreur lors de la récupération de l'événement");
+      }
+    } catch (error) {
+      console.error('Erreur:', error);
+      setError("Erreur lors de la récupération de l'événement");
+    } finally {
+      setLoading(false);
+    }
+  }, [eventId, user?.token]);
 
   useEffect(() => {
-    const fetchEvent = async () => {
-      if (!id) return;
+    let isMounted = true;
 
-      try {
-        const response = await fetch(`https://votre-api.com/api/events/${id}`, {
-          method: 'GET',
-          headers: {
-            ...(user?.token ? { Authorization: `Bearer ${user.token}` } : {}),
-          },
-        });
-        const data = await response.json();
-
-        if (response.ok) {
-          setEvent(data); // Sauvegarde les données de l'événement
-        }
-      } catch (error) {
-        console.error('Erreur lors de la récupération de l\'événement', error);
-      } finally {
-        setLoading(false);
+    const loadEvent = async () => {
+      if (isMounted) {
+        await fetchEvent();
       }
     };
 
-    fetchEvent();
-  }, [id]);
+    loadEvent();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [fetchEvent]);
+
+  const handleEventUpdate = useCallback(() => {
+    setRefreshKey(prev => prev + 1);
+  }, []);
 
   const handleGoBack = () => {
-    navigation.goBack(); // Retour à la page précédente
+    navigation.goBack();
   };
 
   if (!user) {
@@ -58,7 +81,7 @@ const PageEvent = () => {
     );
   }
 
-  if (!id) {
+  if (!eventId) {
     return (
       <View style={styles.centeredContainer}>
         <View style={styles.errorHeader}>
@@ -79,6 +102,17 @@ const PageEvent = () => {
     );
   }
 
+  if (error) {
+    return (
+      <View style={styles.centeredContainer}>
+        <View style={styles.errorHeader}>
+          <Text style={styles.errorTitle}>Erreur</Text>
+        </View>
+        <Text style={styles.errorMessage}>{error}</Text>
+      </View>
+    );
+  }
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <View style={styles.header}>
@@ -90,10 +124,23 @@ const PageEvent = () => {
       </View>
 
       <View style={styles.content}>
-        <EventDetails event={event} />
-        <EventComments eventId={id} />
-        {event?.category && (
-          <RelatedEvents category={event.category} eventId={event._id} />
+        {event && (
+          <EventDetails 
+            event={event} 
+            onEventUpdate={handleEventUpdate}
+            setEvent={setEvent}
+          />
+        )}
+        {event && (
+          <>
+            <EventComments eventId={event._id} />
+            {event.category && (
+              <RelatedEvents 
+                category={event.category} 
+                currentEventId={event._id} 
+              />
+            )}
+          </>
         )}
       </View>
     </ScrollView>
@@ -133,7 +180,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f7f7f7',
+    backgroundColor: 'white',
   },
   errorHeader: {
     backgroundColor: '#e53e3e',

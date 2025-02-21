@@ -4,6 +4,7 @@ import { Calendar, MapPin, Users, Star, CheckCircle } from "lucide-react-native"
 import { format } from "date-fns";
 import { useNavigation } from "@react-navigation/native";
 import { useAuthContext } from "../hooks/useAuthContext";
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import ImageBlob from "./ImageBlob";
 
 const EventCardParticipate = ({ event }) => {
@@ -31,43 +32,30 @@ const EventCardParticipate = ({ event }) => {
     : null;
 
   useEffect(() => {
-    const checkIfCommented = async () => {
+    const checkCommentStatus = async () => {
       try {
-        const commentedResponse = await fetch("/api/user/commented", {
-          method: "GET",
-          headers: {
-            ...(user?.token ? { Authorization: `Bearer ${user.token}` } : {}),
-          },
-        });
-
-        const commentedData = await commentedResponse.json();
-
-        if (commentedResponse.ok) {
-          const hasCommented = commentedData.commented?.some(
-            (eventId) => eventId === event._id
-          );
+        const userData = await AsyncStorage.getItem('user');
+        if (userData) {
+          const parsedUser = JSON.parse(userData);
+          const hasCommented = parsedUser.commented?.includes(event._id);
           setHasAlreadyCommented(hasCommented);
-        } else {
-          setError(commentedData.error || "Échec de la récupération des participations.");
         }
-      } catch (err) {
-        setError(err.message || "Une erreur s'est produite lors de la récupération des données.");
-      } finally {
-        setLoading(false);
+      } catch (error) {
+        console.error("Erreur lors de la vérification du statut de commentaire:", error);
       }
     };
 
-    if (user) {
-      checkIfCommented();
-    }
-  }, [user, event._id]);
+    checkCommentStatus();
+  }, [event._id]);
 
   const handleNavigate = () => {
     navigation.navigate("EventDetails", { eventId: event._id });
   };
 
-  const handleEvaluateNavigate = () => {
-    navigation.navigate("EvaluateEvent", { eventId: event._id });
+  const handleEvaluate = () => {
+    if (!hasAlreadyCommented) {
+      navigation.navigate('EvaluateEvent', { eventId: event._id });
+    }
   };
 
   return (
@@ -122,20 +110,18 @@ const EventCardParticipate = ({ event }) => {
 
         {isEventPassed && (
           <View style={styles.evaluationContainer}>
-            {!hasAlreadyCommented ? (
-              <TouchableOpacity
-                style={styles.evaluateButton}
-                onPress={handleEvaluateNavigate}
-              >
-                <Star size={20} color="#FFFFFF" />
-                <Text style={styles.evaluateButtonText}>Evaluer</Text>
-              </TouchableOpacity>
-            ) : (
-              <View style={styles.evaluatedBadge}>
-                <CheckCircle size={20} color="#F43F5E" />
-                <Text style={styles.evaluatedText}>évalué</Text>
-              </View>
-            )}
+            <TouchableOpacity 
+              style={[
+                styles.evaluateButton,
+                hasAlreadyCommented && styles.disabledButton
+              ]}
+              onPress={handleEvaluate}
+              disabled={hasAlreadyCommented}
+            >
+              <Text style={styles.evaluateButtonText}>
+                {hasAlreadyCommented ? 'Déjà évalué' : 'Évaluer'}
+              </Text>
+            </TouchableOpacity>
           </View>
         )}
       </View>
@@ -147,11 +133,8 @@ const styles = StyleSheet.create({
   container: {
     backgroundColor: 'white',
     borderRadius: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
     marginBottom: 16,
   },
   imageContainer: {
@@ -232,35 +215,18 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   evaluateButton: {
-    flexDirection: 'row',
+    backgroundColor: '#e53e3e',
+    padding: 8,
+    borderRadius: 6,
     alignItems: 'center',
-    backgroundColor: '#F43F5E',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    gap: 8,
+  },
+  disabledButton: {
+    backgroundColor: '#9ca3af',
+    opacity: 0.7,
   },
   evaluateButtonText: {
     color: 'white',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  evaluatedBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#F43F5E',
-    backgroundColor: '#FEE2E2',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    gap: 8,
-    alignSelf: 'flex-start',
-  },
-  evaluatedText: {
-    color: '#F43F5E',
-    fontSize: 12,
-    fontWeight: '600',
+    fontWeight: 'bold',
   },
 });
 

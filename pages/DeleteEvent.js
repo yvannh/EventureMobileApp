@@ -1,59 +1,56 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, Alert, TouchableOpacity } from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { useAuthContext } from '../hooks/useAuthContext';
-import { format } from 'date-fns';
+import EventForm from '../components/EventForm';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const DeleteEventPage = () => {
   const route = useRoute();
   const navigation = useNavigation();
   const { eventId } = route.params || {};
-  const { user } = useAuthContext();
-
-  const [event, setEvent] = useState(null);
+  const [eventData, setEventData] = useState(null);
   const [error, setError] = useState(null);
+  const { user, dispatch } = useAuthContext();
   const [isLoading, setIsLoading] = useState(true);
-  const [formData, setFormData] = useState({
-    title: '',
-    description: '',
-    address: '',
-    postalCode: '',
-    city: '',
-    maxAttendees: '',
-    category: '',
-    date: '',
-    time: '',
-  });
 
   useEffect(() => {
-    if (!user || !eventId) return;
+    const abortController = new AbortController();
 
     const fetchEvent = async () => {
-      console.log(eventId);
       try {
-        const response = await fetch(`https://10.0.2.2:4000/api/events/${eventId}`, {
-          headers: { Authorization: `Bearer ${user.token}` },
+        if (!user || !user.token) {
+          navigation.replace('Login');
+          return;
+        }
+
+        if (!eventId) {
+          navigation.replace('MyEvents');
+          return;
+        }
+
+        const response = await fetch(`http://10.0.2.2:4000/api/events/${eventId}`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${user.token}`,
+          },
+          signal: abortController.signal
         });
 
         if (!response.ok) {
-          throw new Error('Impossible de récupérer les détails de l’événement.');
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Échec du chargement des données');
         }
 
         const data = await response.json();
-        setEvent(data);
-        setFormData({
-          title: data.title,
-          description: data.description,
-          address: data.address,
-          postalCode: data.postalCode,
-          city: data.city,
-          maxAttendees: data.maxAttendees,
-          category: data.category,
-          date: format(new Date(data.date), 'yyyy-MM-dd'),
-          time: format(new Date(data.date), 'HH:mm'),
-        });
+        setEventData(data);
       } catch (err) {
+        if (err.name === 'AbortError') {
+          return;
+        }
+        console.error(err.message);
         setError(err.message);
       } finally {
         setIsLoading(false);
@@ -61,9 +58,19 @@ const DeleteEventPage = () => {
     };
 
     fetchEvent();
-  }, [eventId, user]);
+
+    return () => {
+      abortController.abort();
+    };
+  }, [eventId, user, navigation]);
 
   const handleDelete = async () => {
+    if (!user || !user.token) {
+      Alert.alert('Erreur', 'Vous devez être connecté pour supprimer un événement.');
+      navigation.replace('Login');
+      return;
+    }
+
     Alert.alert(
       'Confirmation',
       'Êtes-vous sûr de vouloir supprimer cet événement ?',
@@ -74,22 +81,59 @@ const DeleteEventPage = () => {
           style: 'destructive',
           onPress: async () => {
             try {
-              const response = await fetch(`https://10.0.2.2:4000/api/events/${eventId}`, {
+              setIsLoading(true);
+
+              const deleteResponse = await fetch(`http://10.0.2.2:4000/api/events/${eventId}`, {
                 method: 'DELETE',
                 headers: {
                   Authorization: `Bearer ${user.token}`,
                 },
               });
 
-              if (!response.ok) {
-                const errorData = await response.json();
+              if (!deleteResponse.ok) {
+                const errorData = await deleteResponse.json();
                 throw new Error(errorData.error || "Échec de la suppression de l'événement.");
               }
 
-              Alert.alert('Succès', 'Événement supprimé avec succès.');
-              navigation.navigate('MyEvents');
+              const updateUserResponse = await fetch(`http://10.0.2.2:4000/api/user/remove-event`, {
+                method: 'PATCH',
+                headers: {
+                  'Content-Type': 'application/json',
+                  Authorization: `Bearer ${user.token}`,
+                },
+                body: JSON.stringify({ eventId })
+              });
+
+              if (!updateUserResponse.ok) {
+                throw new Error("Échec de la mise à jour des participations de l'utilisateur.");
+              }
+
+              const updatedParticipate = Array.isArray(user.participate) 
+                ? user.participate.filter(id => id !== eventId)
+                : [];
+                
+              const updatedUser = { 
+                ...user, 
+                participate: updatedParticipate 
+              };
+              
+              await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
+              dispatch({ type: 'LOGIN', payload: updatedUser });
+
+              navigation.reset({
+                index: 0,
+                routes: [{ name: 'MyEvents' }],
+              });
+              
+              setTimeout(() => {
+                Alert.alert('Succès', 'Événement supprimé avec succès.');
+              }, 100);
+
             } catch (err) {
-              Alert.alert('Erreur', err.message);
+              console.error('Erreur lors de la suppression:', err);
+              Alert.alert('Erreur', err.message || 'Une erreur est survenue lors de la suppression.');
+            } finally {
+              setIsLoading(false);
             }
           },
         },
@@ -97,13 +141,21 @@ const DeleteEventPage = () => {
     );
   };
 
+  const handleGoBack = () => {
+    navigation.goBack();
+  };
+
   if (isLoading) {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#e53e3e" />
-        <Text style={styles.loadingText}>Chargement des détails de l'événement...</Text>
+        <Text style={styles.loadingText}>Chargement des données...</Text>
       </View>
     );
+  }
+
+  if (!user || !eventId) {
+    return null; // Retourner null pendant que la redirection se fait
   }
 
   if (error) {
@@ -115,145 +167,86 @@ const DeleteEventPage = () => {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Suppression de cet événement</Text>
-        <TouchableOpacity onPress={handleDelete} style={styles.deleteButton}>
-          <MaterialIcons name="delete" size={20} color="white" />
-          <Text style={styles.buttonText}>Supprimer l'événement</Text>
+        <TouchableOpacity onPress={handleGoBack} style={styles.backButton}>
+          <MaterialIcons name="arrow-back" size={20} color="gray" />
+          <Text style={styles.backButtonText}>Retour</Text>
         </TouchableOpacity>
+        <Text style={styles.title}>Supprimer l'événement</Text>
       </View>
-
-      {/* Détails de l'événement */}
-      <View style={styles.form}>
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Titre de l'événement</Text>
-          <TextInput style={styles.input} value={formData.title} editable={false} />
-        </View>
-
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Description</Text>
-          <TextInput style={styles.textarea} value={formData.description} editable={false} multiline />
-        </View>
-
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Date</Text>
-          <TextInput style={styles.input} value={formData.date} editable={false} />
-        </View>
-
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Heure</Text>
-          <TextInput style={styles.input} value={formData.time} editable={false} />
-        </View>
-
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Lieu</Text>
-          <TextInput style={styles.input} value={`${formData.address}, ${formData.city}`} editable={false} />
-        </View>
-
-        <TouchableOpacity
-          onPress={() => navigation.navigate('MyEvents')}
-          style={styles.cancelButton}
-        >
-          <Text style={styles.cancelButtonText}>Annuler</Text>
-        </TouchableOpacity>
+      <View style={styles.eventFormContainer}>
+        <EventForm 
+          initialData={eventData} 
+          user={user}
+          readOnly={true}
+          customButtons={[
+            {
+              text: 'Supprimer',
+              onPress: handleDelete,
+              style: 'deleteButton'
+            },
+            {
+              text: 'Annuler',
+              onPress: () => navigation.navigate('MyEvents'),
+              style: 'cancelButton'
+            }
+          ]}
+        />
       </View>
-    </ScrollView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
+    backgroundColor: '#f7f7f7',
     padding: 16,
-    backgroundColor: 'white',
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 16,
   },
-  title: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  deleteButton: {
+  backButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#e53e3e',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 8,
+    marginRight: 16,
   },
-  buttonText: {
-    color: 'white',
+  backButtonText: {
     fontSize: 16,
-    marginLeft: 8,
+    color: 'gray',
+    marginLeft: 4,
   },
-  form: {
-    backgroundColor: 'white',
-    borderRadius: 8,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 5,
-    elevation: 5,
-  },
-  inputGroup: {
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#333',
     marginBottom: 16,
-  },
-  label: {
-    fontSize: 14,
-    color: '#555',
-    marginBottom: 8,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    fontSize: 14,
-    backgroundColor: '#f0f0f0',
-    color: '#555',
-  },
-  textarea: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    fontSize: 14,
-    backgroundColor: '#f0f0f0',
-    color: '#555',
-    height: 80,
-  },
-  cancelButton: {
-    backgroundColor: '#ddd',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginTop: 16,
-  },
-  cancelButtonText: {
-    color: '#555',
-    fontSize: 16,
   },
   centered: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#f7f7f7',
   },
   errorText: {
     color: 'red',
     fontSize: 16,
+    textAlign: 'center',
   },
   loadingText: {
     color: '#555',
     fontSize: 16,
     marginTop: 8,
+  },
+  eventFormContainer: {
+    maxWidth: 600,
+    alignSelf: 'center',
+    width: '100%',
+    flex: 1,
+    paddingBottom: 20,
   },
 });
 

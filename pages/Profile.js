@@ -1,48 +1,21 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
-import { useAuthContext } from '../hooks/useAuthContext';
-import ProfileSection from '../components/ProfilSection';
+import { View, StyleSheet } from 'react-native';
 import UserComments from '../components/UserComments';
-import UserEventsComments from '../components/UserEventsComments';
+import ProfilSection from '../components/ProfilSection';
 
 const Profile = () => {
-  const { user } = useAuthContext();
-
-  if (!user) {
-    return (
-      <View style={styles.notConnectedContainer}>
-        <Text style={styles.notConnectedText}>
-          Vous devez être connecté pour voir votre profil.
-        </Text>
-      </View>
-    );
-  }
-
   return (
-    <ScrollView style={styles.container}>
-      <ProfileSection />
+    <View style={styles.container}>
+      <ProfilSection />
       <UserComments />
-      <UserEventsComments />
-    </ScrollView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 16,
-    backgroundColor: '#f8f9fa',
-  },
-  notConnectedContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f8f9fa',
-  },
-  notConnectedText: {
-    fontSize: 16,
-    color: '#555',
-    textAlign: 'center',
+    backgroundColor: 'white',
   },
 });
 

@@ -81,12 +81,9 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: "#FFFFFF",
     borderRadius: 12,
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 4,
-    elevation: 2,
     marginVertical: 8,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
   },
   imageContainer: {
     position: "relative",
